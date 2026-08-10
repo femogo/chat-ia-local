@@ -1,0 +1,16 @@
+[Unit]
+Description=Chat IA local (Open WebUI sobre Ollama)
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/chat
+EnvironmentFile=/opt/chat/.env
+ExecStart=/opt/chat/venv/bin/open-webui serve --host 0.0.0.0 --port 8081
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
