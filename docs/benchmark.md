@@ -8,7 +8,7 @@ pruebas, modo pensamiento desactivado salvo donde se indica.
 Reproducible con [`scripts/benchmark_calidad.py`](../scripts/benchmark_calidad.py)
 y [`scripts/benchmark_contexto.py`](../scripts/benchmark_contexto.py).
 
-## Ficha de los dos modelos
+## Ficha de los tres modelos
 
 | | `gemma4:e4b` | `qwen3:8b` | `gemma4:12b-it-qat` |
 |---|---|---|---|
@@ -25,6 +25,13 @@ y [`scripts/benchmark_contexto.py`](../scripts/benchmark_contexto.py).
 Las **2 cabezas KV** de `gemma4:e4b` frente a las 8 de `qwen3:8b`, junto con
 un embedding mucho más pequeño, hacen que su caché KV sea varias veces menor.
 Eso es lo que decide todo lo demás en una tarjeta de 8 GB.
+
+---
+
+# Primera tanda: `gemma4:e4b` contra `qwen3:8b`
+
+Las secciones que siguen compararon solo estos dos. El `gemma4:12b-it-qat`
+se midió después, con la misma batería, y está al final del documento.
 
 ## Velocidad (contexto 8192, 8 tareas)
 
@@ -136,6 +143,8 @@ nada. Pero fallan de formas muy distintas:
 | Preguntas donde importa que admita no saber | `qwen3:8b` |
 | Cualquier cosa que requiera razonar | el que sea, **con pensamiento activado** |
 | Verificar datos técnicos sin comprobarlos | ninguno de los dos |
+
+(Esta tabla se amplía con el tercer modelo al final del documento.)
 
 Para el RAG de este proyecto, `gemma4:e4b` es la elección correcta: procesa
 un documento de 127 000 tokens sin salir de la GPU, mientras que `qwen3:8b`
