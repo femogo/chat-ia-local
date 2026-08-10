@@ -43,8 +43,7 @@ ninguna es un fallo de la instalación:
 
 No hay nada que configurar para mitigar esto: es una propiedad del hardware,
 no de Open WebUI. Está documentado aquí para que, si alguien nota que un
-cambio de modelo tarda o que `gemma4:e4b` va lento, no lo diagnostique como
-una avería.
+cambio de modelo tarda unos segundos, no lo diagnostique como una avería.
 
 ## La ventana de contexto: por qué es 16384 y no la de por defecto
 
@@ -79,9 +78,9 @@ proyectos, a los que subiría el consumo de VRAM sin que nadie lo hubiera
 pedido. El arreglo queda acotado a este chat.
 
 **Coste medido** con `llama3.1:8b` a 16384 de contexto: 6,8 GB en total, de
-los cuales 6,3 GB en GPU (93 %). Cabe. Con `gemma4:12b-it-qat` y sobre todo
-con `gemma4:e4b` el porcentaje en GPU baja y la respuesta se ralentiza; es
-otra razón para preferir los dos modelos de 8B en el uso diario.
+los cuales 6,3 GB en GPU (93 %). Cabe. Subir el contexto reduce el
+porcentaje de capas en GPU de todos los modelos, y por tanto los ralentiza;
+es un peaje aceptado a cambio de que las respuestas no salgan vacías.
 
 ## Por qué están desactivados el título, las etiquetas y las sugerencias
 
@@ -122,12 +121,11 @@ una recarga del modelo.
 los dos procesos a la vez no hay expulsión, y se pueden reactivar desde
 *Admin → Ajustes → Interfaz*.
 
-Queda sin identificar qué compone exactamente esos ~5000 tokens de prompt
-base. No hay skills, herramientas, memorias ni modelos personalizados
-definidos (todas esas tablas están vacías), así que es el comportamiento por
-defecto de Open WebUI 0.11.0. No se investigó más porque no cambia el
-arreglo, pero si algún día ese prompt crece, el síntoma volverá y la
-solución será la misma: subir `num_ctx`.
+El origen de esos ~5000 tokens de prompt base quedó identificado más tarde:
+son las especificaciones de las 58 herramientas nativas de Open WebUI. Está
+explicado en la sección final de este documento. Si ese prompt crece, el
+síntoma de las respuestas vacías volverá, y la solución será la misma: subir
+`num_ctx`.
 
 ## `nomic-embed-text` no es un modelo de chat
 
