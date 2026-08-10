@@ -36,6 +36,50 @@ no de Open WebUI. Está documentado aquí para que, si alguien nota que un
 cambio de modelo tarda o que `gemma4:e4b` va lento, no lo diagnostique como
 una avería.
 
+## La ventana de contexto: por qué es 16384 y no la de por defecto
+
+**Síntoma si esto se toca a la baja:** el chat parece no responder. La
+respuesta llega vacía, sin mensaje de error, y en la base de datos queda
+guardada como un mensaje del asistente con `done: true` y contenido de
+longitud cero. Las preguntas de seguimiento que Open WebUI genera bajo la
+respuesta sí aparecen, lo que despista todavía más.
+
+**Causa:** Ollama arranca con `num_ctx = 4096`. El prompt base que Open
+WebUI envía en cada mensaje ronda los 5000 tokens *antes* de añadir la
+pregunta del usuario, así que no cabe. Ollama recorta la entrada y deja
+espacio para un único token de salida. En su log se ve literalmente:
+
+```
+WARN msg="truncating input prompt" limit=4095 prompt=5000 keep=4 new=4095
+```
+
+El modelo funciona; lo que falta es presupuesto de contexto. Se distingue
+del caso "va lento" en que las llamadas auxiliares (título, etiquetas,
+seguimiento) sí responden, porque usan prompts de 200–270 tokens.
+
+**Arreglo aplicado:** `num_ctx = 16384` como parámetro global de Open WebUI,
+no de Ollama. Vive en la configuración de Open WebUI (clave
+`models.default_params`, editable en *Admin → Ajustes → Modelos →
+Parámetros avanzados*) y se siembra en instalaciones nuevas con
+`DEFAULT_MODEL_PARAMS` en el `.env`.
+
+Se hizo así, y no con `OLLAMA_CONTEXT_LENGTH` en `ollama.service`, a
+propósito: esa variable es global y esta máquina comparte Ollama con otros
+proyectos, a los que subiría el consumo de VRAM sin que nadie lo hubiera
+pedido. El arreglo queda acotado a este chat.
+
+**Coste medido** con `llama3.1:8b` a 16384 de contexto: 6,8 GB en total, de
+los cuales 6,3 GB en GPU (93 %). Cabe. Con `gemma4:12b-it-qat` y sobre todo
+con `gemma4:e4b` el porcentaje en GPU baja y la respuesta se ralentiza; es
+otra razón para preferir los dos modelos de 8B en el uso diario.
+
+Queda sin identificar qué compone exactamente esos ~5000 tokens de prompt
+base. No hay skills, herramientas, memorias ni modelos personalizados
+definidos (todas esas tablas están vacías), así que es el comportamiento por
+defecto de Open WebUI 0.11.0. No se investigó más porque no cambia el
+arreglo, pero si algún día ese prompt crece, el síntoma volverá y la
+solución será la misma: subir `num_ctx`.
+
 ## `nomic-embed-text` no es un modelo de chat
 
 Se usa exclusivamente para generar los embeddings del RAG (búsqueda semántica

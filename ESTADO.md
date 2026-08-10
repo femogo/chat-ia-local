@@ -24,6 +24,34 @@ Fecha: 2026-08-10.
   `CAMBIAR_POR_CADENA_ALEATORIA`.
 - `/opt/portal/index.html` enlaza el chat en el puerto 8081.
 
+## Corregido después de la primera prueba real (10/08/2026)
+
+Con el usuario ya registrado, el primer chat **devolvía respuestas vacías**:
+el mensaje del asistente quedaba guardado con `done: true`, sin error y con
+contenido de longitud cero. No era lentitud ni un fallo de Ollama.
+
+Causa: `num_ctx = 4096` (el valor por defecto de Ollama) contra un prompt
+base de Open WebUI de ~5000 tokens. Ollama recortaba la entrada a 4095 y
+dejaba sitio para un solo token de salida:
+
+```
+WARN msg="truncating input prompt" limit=4095 prompt=5000 keep=4 new=4095
+```
+
+Arreglo: `num_ctx = 16384` como parámetro global de Open WebUI
+(`models.default_params`), sembrado además con `DEFAULT_MODEL_PARAMS` en el
+`.env`. Deliberadamente **no** se tocó `OLLAMA_CONTEXT_LENGTH` en
+`ollama.service`, que es global y afectaría a los demás proyectos de la
+máquina que comparten Ollama.
+
+Verificado tras el cambio: `llama3.1:8b` a 16384 de contexto responde
+correctamente y ocupa 6,8 GB, de los cuales 6,3 GB en GPU (93 %). Detalle
+completo en [docs/modelos.md](docs/modelos.md).
+
+Es un defecto del plan original, que no fijaba la ventana de contexto en
+ningún sitio. Se hizo copia de seguridad de `data/webui.db` antes de
+modificar la configuración.
+
 ## Pendiente — acción manual del propietario
 
 **El registro del primer usuario (administrador) no está hecho.** Por
