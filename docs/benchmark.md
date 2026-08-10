@@ -1,4 +1,4 @@
-# Benchmark: `gemma4:e4b` contra `qwen3:8b`
+# Benchmark: `gemma4:e4b`, `qwen3:8b` y `gemma4:12b-it-qat`
 
 Medido el 10/08/2026 sobre la RTX 4060 de 8 GB, contra la API de Ollama
 directamente (sin pasar por Open WebUI, para que su prompt base de ~5000
@@ -10,17 +10,17 @@ y [`scripts/benchmark_contexto.py`](../scripts/benchmark_contexto.py).
 
 ## Ficha de los dos modelos
 
-| | `gemma4:e4b` | `qwen3:8b` |
-|---|---|---|
-| Parámetros declarados | 8,0B | 8,2B |
-| Cuantización | Q4_K_M | Q4_K_M |
-| Tamaño en disco | 9,6 GB | 5,2 GB |
-| Capas | 42 | 36 |
-| Cabezas de atención | 8 | 32 |
-| **Cabezas KV** | **2** | **8** |
-| Longitud de embedding | 2560 | 4096 |
-| **Contexto máximo** | **131 072** | **40 960** |
-| Capacidades | texto, visión, audio, herramientas, pensamiento | texto, herramientas, pensamiento |
+| | `gemma4:e4b` | `qwen3:8b` | `gemma4:12b-it-qat` |
+|---|---|---|---|
+| Parámetros declarados | 8,0B | 8,2B | 11,9B |
+| Cuantización | Q4_K_M | Q4_K_M | Q4_0 |
+| Tamaño en disco | 9,6 GB | 5,2 GB | 7,2 GB |
+| Capas | 42 | 36 | 48 |
+| Cabezas de atención | 8 | 32 | 16 |
+| **Cabezas KV** | **2** | **8** | — |
+| Longitud de embedding | 2560 | 4096 | 3840 |
+| **Contexto máximo declarado** | 131 072 | 40 960 | **262 144** |
+| Capacidades | texto, visión, audio, herramientas, pensamiento | texto, herramientas, pensamiento | texto, visión, audio, herramientas, pensamiento |
 
 Las **2 cabezas KV** de `gemma4:e4b` frente a las 8 de `qwen3:8b`, junto con
 un embedding mucho más pequeño, hacen que su caché KV sea varias veces menor.
@@ -155,3 +155,87 @@ por la misma razón artificial. Se detectó porque los resultados eran
 idénticos y absurdos, y se rehízo calibrando el relleno con los tokens
 reales de cada tokenizador. Queda anotado porque el error es fácil de
 repetir.
+
+---
+
+# `gemma4:12b-it-qat` (medido el 10/08/2026)
+
+Se le pasó la misma batería. Es el modelo más capaz de los tres y el más
+lento con diferencia.
+
+## Velocidad
+
+| | `gemma4:e4b` | `qwen3:8b` | `gemma4:12b-it-qat` |
+|---|---|---|---|
+| Generación media | 58 tok/s | 48 tok/s | **14 tok/s** |
+| Procesado de prompt | 3200 tok/s | 2100 tok/s | **870 tok/s** |
+| Respuesta larga (~1000 tokens) | 30 s | 27 s | **75 s** |
+
+Escribe unas **cuatro veces más despacio** que los otros dos. Nunca coloca
+más de 40 de sus 49 capas en la GPU, ni siquiera con 4096 de contexto.
+
+## Calidad
+
+| Tarea | `gemma4:e4b` | `qwen3:8b` | `gemma4:12b-it-qat` |
+|---|---|---|---|
+| Factual con trampa | ✅ | ✅ | ✅ |
+| Aritmética con horas | ❌ 19:45 | ✅ 17:50 | ✅ 17:50 |
+| Código Python (ejecutado) | ✅ | ✅ | ✅ |
+| Formato JSON exacto | ✅ | ✅ | ✅ |
+| **Teorema inexistente** | ❌ lo inventa | ✅ avisa | ❌ **lo inventa** |
+| Razonamiento por orden | ✅ | ✅ | ✅ |
+| Resumen de 20 palabras | ❌ 22 | ❌ 16 | ❌ 21 (el más cerca) |
+| Pregunta técnica abierta | ✅ | ❌ | ✅ **la mejor de las tres** |
+
+En la pregunta técnica abierta es el único que separa con precisión los dos
+planos: "difícil que lo superes en razonamiento puro, pero sí en precisión de
+datos específicos si el dominio está bien curado". Ni el `e4b` ni `qwen3`
+llegan a esa distinción.
+
+Cae en la trampa de la alucinación igual que el `e4b`. **Los dos Gemma se
+inventan el teorema; `qwen3` es el único de los tres que avisa.**
+
+## Modo pensamiento
+
+| Modelo | Sin pensar | Pensando |
+|---|---|---|
+| `gemma4:e4b` | ❌ — 7,0 s | ✅ — 11,9 s |
+| `qwen3:8b` | ❌ — 4,8 s | ✅ — 8,4 s |
+| `gemma4:12b-it-qat` | ❌ — 2,4 s | ✅ — **45,4 s** |
+
+Los tres fallan sin pensamiento y aciertan con él. En el 12B el peaje es de
+45 segundos, frente a los 4–5 de los otros dos.
+
+## Estrés de contexto
+
+| Contexto | Prompt real | Total | Gen tok/s | Capas GPU | VRAM | Aguja |
+|---|---|---|---|---|---|---|
+| 4 096 | 3 335 | 15,8 s | 12,7 | 40/49 | 6,4 GB | ✅ |
+| 8 192 | 7 313 | 20,2 s | 13,0 | 40/49 | 6,4 GB | ✅ |
+| 16 384 | 15 320 | 30,4 s | 11,0 | 39/49 | 6,4 GB | ✅ |
+| 32 768 | 31 232 | 57,6 s | 6,8 | 37/49 | 6,4 GB | ✅ |
+| 65 536 | 63 107 | 126,2 s | 4,5 | 34/49 | 6,4 GB | ✅ |
+| 131 072 | 126 908 | **332,7 s** | 2,0 | — | 6,5 GB | ✅ |
+| 262 144 | **sin completar** | >25 min | — | — | — | — |
+
+**Recupera la aguja en todos los escalones que terminó**, incluido el de
+127 000 tokens, pero tardando cinco minutos y medio.
+
+El escalón de 262 144 —su máximo declarado— **se abortó a los 25 minutos**
+con solo unos 39 000 tokens procesados. No es un fallo del modelo: es que en
+esta máquina ese contexto no es alcanzable en un tiempo razonable. Queda como
+dato incompleto, no como rotura.
+
+## Los tres juntos: cuándo usar cada uno
+
+| Situación | Modelo |
+|---|---|
+| Uso general, y todo lo que lleve documentos largos | **`gemma4:e4b`** |
+| La mejor respuesta razonada, con tiempo por delante | **`gemma4:12b-it-qat`** + pensamiento |
+| Preguntas cortas donde importe que admita no saber | `qwen3:8b` |
+| Contextos por encima de 16 000 tokens | nunca `qwen3:8b` |
+| Verificar datos técnicos sin contrastarlos | ninguno |
+
+Cómo falla cada uno al rebasar su límite, que es lo que más importa en un
+RAG: los dos Gemma devuelven **respuesta vacía** (evidente); `qwen3`
+**se inventa un dato plausible** (silencioso, y por eso peor).
