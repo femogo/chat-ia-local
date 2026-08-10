@@ -52,6 +52,23 @@ Es un defecto del plan original, que no fijaba la ventana de contexto en
 ningún sitio. Se hizo copia de seguridad de `data/webui.db` antes de
 modificar la configuración.
 
+### Segundo problema, en la misma sesión: recargas del modelo
+
+Resuelto lo anterior, las respuestas alternaban ~10 s y ~1 minuto. Causa:
+las llamadas auxiliares de Open WebUI (título, etiquetas, sugerencias) se
+hacen sin `num_ctx`, Ollama levanta un segundo proceso con `-c 4096` y en
+8 GB de VRAM los dos procesos se expulsan mutuamente. Ocho recargas del
+modelo en quince minutos de uso.
+
+Arreglo: desactivadas las cuatro generaciones auxiliares. Se pierden los
+títulos automáticos, las etiquetas y las preguntas de seguimiento; fue una
+decisión del propietario tras plantearle la alternativa. Detalle en
+[docs/modelos.md](docs/modelos.md).
+
+Pendiente de confirmar por el propietario con dos o tres mensajes seguidos:
+que ya no aparecen arranques con `-c 4096` en
+`journalctl -u ollama | grep 'starting llama-server'`.
+
 ## Pendiente — acción manual del propietario
 
 **El registro del primer usuario (administrador) no está hecho.** Por

@@ -73,6 +73,45 @@ los cuales 6,3 GB en GPU (93 %). Cabe. Con `gemma4:12b-it-qat` y sobre todo
 con `gemma4:e4b` el porcentaje en GPU baja y la respuesta se ralentiza; es
 otra razón para preferir los dos modelos de 8B en el uso diario.
 
+## Por qué están desactivados el título, las etiquetas y las sugerencias
+
+**Síntoma:** el primer mensaje de un chat responde en ~10 s y el siguiente
+tarda cerca de un minuto, de forma alterna e imprevisible.
+
+**Causa:** tras cada mensaje, Open WebUI lanza llamadas auxiliares al modelo
+para generar el título del chat, las etiquetas y las preguntas de
+seguimiento. Esas llamadas **no aplican `models.default_params`** —
+`routers/tasks.py` solo lee `max_tokens` de los parámetros del modelo—, así
+que salen sin `num_ctx` y Ollama arranca un segundo proceso con el valor por
+defecto, 4096. En una tarjeta de 8 GB no caben a la vez el proceso de 16384
+y el de 4096: cada uno expulsa al otro. Resultado medido en 15 minutos de
+uso normal:
+
+```
+4 arranques con  -c 16384   ← los mensajes del usuario
+4 arranques con  -c 4096    ← las llamadas auxiliares
+```
+
+Ocho recargas completas del modelo. Con `gemma4:12b-it-qat`, que solo
+coloca 39 de 49 capas en GPU, cada recarga cuesta entre 10 y 15 segundos, a
+los que hay que sumar reprocesar los ~5000 tokens del prompt base.
+
+**Arreglo aplicado:** desactivar las cuatro generaciones auxiliares
+(`task.title.enable`, `task.tags.enable`, `task.follow_up.enable`,
+`task.autocomplete.enable`), sembradas además en el `.env` con
+`ENABLE_TITLE_GENERATION`, `ENABLE_TAGS_GENERATION`,
+`ENABLE_FOLLOW_UP_GENERATION` y `ENABLE_AUTOCOMPLETE_GENERATION`.
+
+**Lo que se pierde:** los chats se nombran con las primeras palabras del
+mensaje en lugar de con un título generado, no hay etiquetas automáticas y
+desaparecen las preguntas de seguimiento bajo cada respuesta. Es una
+decisión consciente: en esta máquina, cada una de esas comodidades cuesta
+una recarga del modelo.
+
+**Si algún día hay más VRAM**, esto deja de ser necesario: con sitio para
+los dos procesos a la vez no hay expulsión, y se pueden reactivar desde
+*Admin → Ajustes → Interfaz*.
+
 Queda sin identificar qué compone exactamente esos ~5000 tokens de prompt
 base. No hay skills, herramientas, memorias ni modelos personalizados
 definidos (todas esas tablas están vacías), así que es el comportamiento por
