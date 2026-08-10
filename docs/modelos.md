@@ -6,11 +6,16 @@ montarlo.
 
 | Modelo | Tamaño en disco | Uso recomendado |
 |---|---|---|
-| `llama3.1:8b` | 4,9 GB | conversación general; el más rápido de los cuatro, buen valor por defecto |
-| `qwen3:8b` | 5,2 GB | razonamiento y código |
-| `gemma4:12b-it-qat` | 7,2 GB | conversación general; cuantizado QAT, cabe en 8 GB con margen ajustado |
-| `gemma4:e4b` | 9,6 GB | conversación general; **no cabe entero en 8 GB de VRAM** |
+| `gemma4:e4b` | 9,6 GB | **el mejor por defecto**: único que carga entero en GPU, y el más rápido con diferencia |
+| `gemma4:12b-it-qat` | 7,2 GB | la mejor calidad de respuesta, a cambio de ser el más lento |
+| `qwen3:8b` | 5,2 GB | razonamiento; ojo, es el que más se equivocó en la prueba (ver más abajo) |
+| `llama3.1:8b` | 4,9 GB | poco fiable en esta instalación: tiende a emitir llamadas a herramientas en vez de responder |
 | `nomic-embed-text` | 274 MB | embeddings para RAG — no es un modelo de chat |
+
+> El tamaño en disco **no predice** ni la velocidad ni si cabe en la GPU.
+> `gemma4:e4b` ocupa 9,6 GB, el doble que `llama3.1:8b`, y sin embargo es el
+> único que coloca el 100 % de sus capas en la GPU. Las cifras medidas están
+> en la sección de rendimiento, más abajo.
 
 ## El límite de 8 GB de VRAM
 
@@ -23,13 +28,18 @@ ninguna es un fallo de la instalación:
   modelo que estaba cargado y carga el nuevo: varios segundos antes de la
   primera respuesta. Es más notorio cuanto más grande es el modelo que entra
   o sale.
-- **`gemma4:e4b` no entra entero.** Con 9,6 GB en disco (y más en VRAM
-  cargado, por el contexto) no cabe en 8 GB. Ollama hace *offload* parcial a
-  CPU: sigue funcionando, pero responde notablemente más despacio que los
-  otros tres. Si la velocidad importa más que el modelo concreto, usar
-  `llama3.1:8b` o `qwen3:8b`.
-- **`gemma4:12b-it-qat`** sí cabe entero gracias a la cuantización QAT, pero
-  con poco margen: con un contexto largo puede acercarse al límite.
+- **Ninguno de los cuatro cabe entero, salvo `gemma4:e4b`.** Con 16384 de
+  contexto, las capas que Ollama consigue colocar en GPU son: `e4b` 43/43
+  (100 %), `qwen3:8b` 34/37, `llama3.1:8b` 32/33 y `gemma4:12b-it-qat`
+  39/49 (el peor, un 80 %). Las capas que quedan fuera se ejecutan en CPU y
+  son las que marcan la velocidad.
+
+> **Corrección.** Las primeras versiones de este documento afirmaban que
+> `gemma4:e4b` no cabía en 8 GB y que era el más lento, y que
+> `gemma4:12b-it-qat` sí cabía entero. Ambas cosas eran falsas: se dedujeron
+> del tamaño en disco, sin medir. Al medir resultó lo contrario. La `e4b`
+> tiene parámetros *efectivos* de unos 4B pese a ocupar 9,6 GB en disco, y
+> por eso entra entera y corre cinco veces más rápido que la de 12B.
 
 No hay nada que configurar para mitigar esto: es una propiedad del hardware,
 no de Open WebUI. Está documentado aquí para que, si alguien nota que un
@@ -142,3 +152,45 @@ descargado — no hace falta reiniciar `chat-web.service`, Open WebUI consulta
 la lista de modelos de Ollama en cada petición. Comprobar antes cuánto ocupa
 en disco (`df -h /opt`) y si cabe en la VRAM disponible junto con los que ya
 hay, siguiendo el mismo criterio que la tabla de arriba.
+
+## Rendimiento medido (10/08/2026)
+
+Misma pregunta técnica larga a los cuatro modelos, con el prompt base de
+~5000 tokens que inyecta Open WebUI. Datos de `usage` de Open WebUI y de los
+`print_timing` de Ollama.
+
+| Modelo | Capas en GPU | Prompt (tok/s) | Generación (tok/s) | Tokens generados | Total |
+|---|---|---|---|---|---|
+| `gemma4:e4b` | **43/43** | **3168** | **55,7** | 1873 | **48 s** |
+| `qwen3:8b` | 34/37 | 1657 | 18,2 | 827 | 58 s |
+| `gemma4:12b-it-qat` | 39/49 | 862 | 10,9 | 1820 | **184 s** |
+| `llama3.1:8b` | 32/33 | 2037 | 26,9 | 150 | 17 s (no respondió) |
+
+`gemma4:e4b` es **5,1 veces más rápido generando** que `gemma4:12b-it-qat` y
+**3,7 veces más rápido procesando el prompt**, produciendo una respuesta de
+longitud equivalente. La diferencia está entera en el *offload* a CPU.
+
+El tiempo de `llama3.1:8b` no es comparable: no llegó a responder.
+
+## El coste fijo de las herramientas nativas
+
+Open WebUI 0.11.0 define **58 herramientas nativas** en `tools/builtin.py`
+(notas, memorias, calendario, automatizaciones, canales, bases de
+conocimiento, ejecución de código, búsqueda web, generación de imagen…) e
+inyecta sus especificaciones JSON en el prompt de cada mensaje. De ahí salen
+los ~5000 tokens de prompt base que aparecen en todas las mediciones.
+
+Ese coste se paga en cada mensaje, se usen o no las herramientas:
+
+- `gemma4:12b-it-qat`: **5,9 s** de procesado antes del primer token.
+- `gemma4:e4b`: 1,6 s.
+
+Y tiene un segundo efecto, peor que la lentitud: **`llama3.1:8b` no responde
+a las preguntas, sino que emite la llamada a la herramienta en crudo**. En la
+prueba devolvió un bloque JSON invocando `query_knowledge_bases` en lugar de
+contestar. Es un modelo que no maneja bien el formato de *tool calling* que
+usa Open WebUI, y con 58 herramientas delante se despista siempre.
+
+Si no se van a usar esas funciones, desactivarlas desde *Admin → Ajustes →
+Herramientas* recorta el prompt base a unos pocos cientos de tokens y
+devuelve a `llama3.1:8b` la capacidad de responder. Pendiente de hacer.
