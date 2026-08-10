@@ -153,6 +153,10 @@ hay, siguiendo el mismo criterio que la tabla de arriba.
 
 ## Rendimiento medido (10/08/2026)
 
+> Comparativa a fondo entre `gemma4:e4b` y `qwen3:8b` —velocidad, calidad por
+> tipo de tarea, estrés de contexto hasta el punto de rotura y cómo falla
+> cada uno— en [benchmark.md](benchmark.md).
+
 Misma pregunta técnica larga a los cuatro modelos, con el prompt base de
 ~5000 tokens que inyecta Open WebUI. Datos de `usage` de Open WebUI y de los
 `print_timing` de Ollama.
